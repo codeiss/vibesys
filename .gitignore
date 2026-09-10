@@ -21,6 +21,9 @@ dist/
 *.pdf
 .arts/
 .wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 backend/prisma/d1-import.sql
 backend/prisma/d1-splits/
 .superpowers/
