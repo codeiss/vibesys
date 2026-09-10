@@ -1,5 +1,8 @@
 # VibeCoding 教学实践平台
 
+[![CI](https://github.com/liuxm2011/vibesys/actions/workflows/ci.yml/badge.svg)](https://github.com/liuxm2011/vibesys/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+
 > 用一个选题走完「需求 → 文档 → AI 编码 → 部署」的完整现代软件工程流程。
 
 面向高校计算机 / 软件工程专业的教学实践平台。学生在平台上选题，由 AI 生成结构化的 PRD 与前后端技术文档，再把这些文档作为提示词交给 Claude Code、Codex 等 AI 编码工具完成开发，最终在平台提交仓库与部署地址完成交付。
@@ -178,6 +181,24 @@ AI 配置按三级优先级解析：**学生个人设置 → 管理员启用的 
 | [CLAUDE.md](./CLAUDE.md) | AI 编码工具协作说明 |
 | [docs/superpowers/](./docs/superpowers/) | 各功能的设计文档与实施计划 |
 | [.planning/](./.planning/) | 阶段路线图与完成状态 |
+
+---
+
+## 贡献
+
+提交前请先跑通本仓库的两个质量门，CI 会做同样的检查：
+
+```bash
+cd backend  && npx tsc --noEmit    # 后端类型检查
+cd frontend && pnpm build          # 前端构建（含 vue-tsc 类型检查）
+```
+
+- 提交 Issue 请使用 [Bug 报告](.github/ISSUE_TEMPLATE/bug_report.yml) 或 [功能建议](.github/ISSUE_TEMPLATE/feature_request.yml) 模板。
+- 提交 PR 请按 [PR 模板](.github/pull_request_template.md) 填写改动类型、影响范围与自检清单。
+- 改动 `backend/prisma/schema.prisma` 后需执行 `pnpm db:generate`，并同步提交 `backend/src/generated/prisma/` 下重新生成的产物（本仓库按约定将生成产物入库，供部署直接使用）。
+- 不要提交任何明文密钥：`.env`、`.dev.vars` 等已在 `.gitignore` 中排除。
+
+> 测试尚未接入 CI：`backend/tests` 混用 `node:test` 与 `vitest`（后者未列入依赖），`frontend` 仅有 setup 文件、无实际用例。补齐后再纳入流水线。
 
 ---
 
