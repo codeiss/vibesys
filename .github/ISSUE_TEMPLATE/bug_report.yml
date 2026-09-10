@@ -1,0 +1,46 @@
+name: Bug 报告
+description: 报告平台功能异常或错误
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量填写完整，便于快速定位问题。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你期望的结果是什么？
+      placeholder: 例如：点击「生成 PRD」后页面持续加载，最终返回 500 错误
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 使用学生账号登录
+        2. 进入选题池并选定一个选题
+        3. 点击「生成 PRD」
+        4. 观察到报错
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 使用角色
+      options:
+        - 学生
+        - 管理员
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 浏览器、操作系统，以及是线上环境还是本地开发
+      placeholder: Chrome 130 / macOS / 线上 vibesys.7878.cloud
+    validations:
+      required: false
