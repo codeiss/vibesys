@@ -261,7 +261,11 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
     };
 
     const data = new TextEncoder().encode(JSON.stringify(payload));
-    const hashBuffer = await crypto.subtle.digest('MD5', data);
+    // 用 SHA-256 而非 MD5：Workers 运行时把 MD5 作为非标准扩展支持，
+    // 但 Node 的 WebCrypto 不支持（会抛 "Unrecognized algorithm name"），
+    // 本地开发与测试都会崩。缓存键仅存于内存 Map、不做持久化，
+    // 换算法不影响任何已有数据。
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
@@ -2233,8 +2237,13 @@ ${getAgentsPromptTemplate(domain)}
     // Extract searchable keywords from the path segments
     const keywords = targetHeadingPath
       .flatMap(segment => segment.split(/[\s>]+/))
+      // 先去掉 markdown 标题标记：'## API设计' 会被按空白切成 ['##', 'API设计']，
+      // 而 '##' 长度恰好为 2，会通过下面的长度过滤，导致文档里任意标题行都命中，
+      // 补丁被插到无关章节。此处清掉 '#' 前缀。
+      .map(kw => kw.replace(/^#+/, ''))
       .map(kw => kw.replace(/^\d+[\.\)、]*/, '').trim().toLowerCase())
-      .filter(kw => kw.length >= 2);
+      // 只保留含字母或数字的词，顺带过滤 '##'、'---' 这类纯标点 token。
+      .filter(kw => kw.length >= 2 && /[\p{L}\p{N}]/u.test(kw));
 
     if (keywords.length === 0) {
       return { applied: false, content, reason: 'target_heading_path_not_found' };

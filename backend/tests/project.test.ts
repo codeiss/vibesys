@@ -1,39 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
+
+// 这些用例尚未实现，使用 it.todo 显式标记，避免用「恒真断言」制造虚假通过。
+// 覆盖点来自 PRD 需求编号（TOPIC-04、DASH-01/02、D-06/09），实现后请把
+// it.todo 改为 it 并补上真实断言。可复用 tests/topic.test.ts 的 HTTP 集成
+// 测试骨架（getRequestListener + 临时用户 + afterEach 清理）。
 
 describe('Projects API', () => {
   describe('POST /api/projects', () => {
-    it('should create project from topic', async () => {
-      // Placeholder - TOPIC-04, D-06
-      expect(true).toBe(true);
-    });
-
-    it('should reject when exceeding 10 project limit', async () => {
-      // Placeholder - D-08
-      expect(true).toBe(true);
-    });
+    it.todo('should create project from topic'); // TOPIC-04, D-06
+    it.todo('should reject when exceeding 10 project limit'); // D-08
   });
 
   describe('GET /api/projects', () => {
-    it('should return user projects', async () => {
-      // Placeholder - DASH-01
-      expect(true).toBe(true);
-    });
-
-    it('should include project status', async () => {
-      // Placeholder - DASH-02
-      expect(true).toBe(true);
-    });
+    it.todo('should return user projects'); // DASH-01
+    it.todo('should include project status'); // DASH-02
   });
 
   describe('DELETE /api/projects/:id', () => {
-    it('should delete project', async () => {
-      // Placeholder - D-09
-      expect(true).toBe(true);
-    });
-
-    it('should reject deletion of other users project', async () => {
-      // Placeholder - Security check
-      expect(true).toBe(true);
-    });
+    it.todo('should delete project'); // D-09
+    it.todo('should reject deletion of other users project'); // Security: 归属校验
   });
 });

@@ -116,11 +116,13 @@ vibesys/
 │   │   ├── services/         # AI 生成、Provider 解析、统计
 │   │   ├── middleware/       # JWT 鉴权、封禁拦截、限流
 │   │   └── generated/        # Prisma 客户端（生成产物，勿手动修改）
+│   ├── tests/                # Vitest 单元与集成测试（集成测试真实连库 + 起 HTTP 服务）
 │   ├── prisma/schema.prisma  # 数据模型
 │   └── wrangler.toml         # Workers 配置
 ├── frontend/                 # Vue 3 前端
 │   └── src/
 │       ├── views/            # 页面（含 admin/ 与 graduation/ 子目录）
+│       ├── __tests__/        # Vitest 用例（jsdom 环境）
 │       └── api/  stores/  router/  components/
 ├── docs/superpowers/         # 设计文档与实施计划
 ├── .planning/                # 阶段规划与状态追踪
@@ -186,19 +188,28 @@ AI 配置按三级优先级解析：**学生个人设置 → 管理员启用的 
 
 ## 贡献
 
-提交前请先跑通本仓库的两个质量门，CI 会做同样的检查：
+提交前请先跑通本仓库的质量门，CI 会做同样的检查：
 
 ```bash
-cd backend  && npx tsc --noEmit    # 后端类型检查
-cd frontend && pnpm build          # 前端构建（含 vue-tsc 类型检查）
+# 后端：类型检查（源码 + 测试）、单元与集成测试
+cd backend  && pnpm typecheck && pnpm test
+
+# 前端：类型检查（应用 + 测试）、用例、构建
+cd frontend && pnpm typecheck && pnpm test && pnpm build
 ```
+
+后端集成测试会真实连接 SQLite 并起 HTTP 服务，需要 `backend/.env` 中配置好
+`DATABASE_URL` 与 `JWT_SECRET`，并已执行 `pnpm db:push` 建库。测试数据在
+`afterEach` 中自行清理，不会污染开发库。
 
 - 提交 Issue 请使用 [Bug 报告](.github/ISSUE_TEMPLATE/bug_report.yml) 或 [功能建议](.github/ISSUE_TEMPLATE/feature_request.yml) 模板。
 - 提交 PR 请按 [PR 模板](.github/pull_request_template.md) 填写改动类型、影响范围与自检清单。
 - 改动 `backend/prisma/schema.prisma` 后需执行 `pnpm db:generate`，并同步提交 `backend/src/generated/prisma/` 下重新生成的产物（本仓库按约定将生成产物入库，供部署直接使用）。
 - 不要提交任何明文密钥：`.env`、`.dev.vars` 等已在 `.gitignore` 中排除。
 
-> 测试尚未接入 CI：`backend/tests` 混用 `node:test` 与 `vitest`（后者未列入依赖），`frontend` 仅有 setup 文件、无实际用例。补齐后再纳入流水线。
+> 测试覆盖仍在补齐中。`backend/tests/ai.test.ts`、`document.test.ts`、
+> `project.test.ts` 中的用例以 `it.todo` 显式标记（未实现），不会计入通过数；
+> 补齐后请把 `it.todo` 改为 `it` 并补上真实断言。
 
 ---
 

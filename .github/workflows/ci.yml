@@ -12,34 +12,50 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend typecheck
+    name: Backend typecheck & test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # 集成测试会连接 SQLite 并读取 JWT_SECRET（src/index.ts 在缺少这两项时
+    # 直接退出），CI 里没有 .env，因此显式提供测试用值。
+    env:
+      DATABASE_URL: "file:./dev.db"
+      JWT_SECRET: "ci-only-not-a-real-secret"
     steps:
       - uses: actions/checkout@v4
 
+      # vitest 5 要求 Node ^22.12.0 || ^24 || >=26，不能用 Node 20
       - uses: pnpm/action-setup@v4
         with:
           version: 9
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: backend/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: backend
-        env:
-          DATABASE_URL: "file:./dev.db"
         run: pnpm install --frozen-lockfile
 
+      # 源码与测试分属两份 tsconfig：tsconfig.json 只覆盖 src/**，
+      # tsconfig.test.json 额外把 tests/** 纳入检查（此前测试从未被类型检查）
       - name: Typecheck
-        working-directory: backend
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
+
+      - name: Prepare test database
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: Test
+        run: pnpm test
 
   frontend:
-    name: Frontend build
+    name: Frontend typecheck, test & build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -49,14 +65,20 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Install dependencies
-        working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      # vue-tsc -b 覆盖应用代码，tsconfig.test.json 额外把 src/__tests__ 纳入检查
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test
+        run: pnpm test
+
+      # build 为 vue-tsc -b && vite build
       - name: Build
-        working-directory: frontend
         run: pnpm build

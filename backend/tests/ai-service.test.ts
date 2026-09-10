@@ -1,7 +1,18 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { DocType } from '@prisma/client';
+import { test, expect } from 'vitest';
+import { DocType, type PrismaClient } from '../src/generated/prisma';
 import { AIService, type ReviewResult } from '../src/services/ai.service.js';
+
+/**
+ * AIService#getConfig 只有在拿到 prisma 实例时，才会把 env 参数透传给
+ * apiProviderService.getEffectiveConfig（见 ai.service.ts getConfig 的分支）；
+ * 且配置已不再直接读 process.env。这里给一个最小桩：DB 里查不到启用的
+ * provider，于是回退到显式传入的 env——保持单元测试不依赖真实数据库。
+ */
+function createStubPrisma(): PrismaClient {
+  return {
+    apiProvider: { findFirst: async () => null }
+  } as unknown as PrismaClient;
+}
 
 function createStreamResponse(markdown: string): Response {
   const payload = [
@@ -47,11 +58,14 @@ function createChatCompletionResponse(content: string): Response {
 }
 
 test('forceRegenerate bypasses cached stream results and re-invokes model request', async () => {
-  process.env.MINIMAX_API_KEY = 'test-key';
-  process.env.MINIMAX_BASE_URL = 'https://example.test/v1';
   delete process.env.MOCK_AI;
 
   const aiService = new AIService();
+  aiService.setContext(createStubPrisma(), {
+    MINIMAX_API_KEY: 'test-key',
+    MINIMAX_BASE_URL: 'https://example.test/v1',
+    MINIMAX_MODEL: 'minimax-m2-7'
+  });
   const originalFetch = global.fetch;
   const fetchCalls: string[] = [];
 
@@ -65,6 +79,7 @@ test('forceRegenerate bypasses cached stream results and re-invokes model reques
       title: '缓存绕过测试',
       description: '验证重新生成时不能直接命中缓存。',
       domain: 'SE' as const,
+      platform: 'WEB' as const,
       objectives: '重新生成时必须重新调用模型。',
       techStack: ['Vue 3', 'Node.js'],
       previousDocs: {} as Record<string, string>
@@ -82,9 +97,9 @@ test('forceRegenerate bypasses cached stream results and re-invokes model reques
       { bypassCache: true }
     );
 
-    assert.equal(fetchCalls.length, 2);
-    assert.match(first, /# PRD 1/);
-    assert.match(second, /# PRD 2/);
+    expect(fetchCalls.length).toBe(2);
+    expect(first.content).toMatch(/# PRD 1/);
+    expect(second.content).toMatch(/# PRD 2/);
   } finally {
     global.fetch = originalFetch;
   }
@@ -97,12 +112,14 @@ test('AGENTS document generation merges CLAUDE guidelines into final content', a
   const aiService = new AIService();
 
   try {
-    const content = await aiService.generateDocument(
+    // generateDocument 现返回 { content, usage }，不再是裸字符串
+    const result = await aiService.generateDocument(
       DocType.AGENTS,
       {
         title: '校园二手交易平台',
         description: '面向校园用户的闲置物品交易系统。',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '输出完整的规则文档。',
         techStack: ['Vue 3', 'Spring Boot', 'MySQL'],
         previousDocs: {
@@ -113,19 +130,20 @@ test('AGENTS document generation merges CLAUDE guidelines into final content', a
       }
     );
 
-    assert.match(content, /^# AGENTS\.md/m);
-    assert.match(content, /^## 最高优先规则$/m);
-    assert.match(content, /当用户在 AI 编程工具中输入“了解项目规则，查看 AGENTS\.md 文档”时，必须立即先执行本规则/);
-    assert.match(content, /^## CLAUDE\.md$/m);
-    assert.match(content, /Behavioral guidelines to reduce common LLM coding mistakes\./);
-    assert.match(content, /### 1\. Think Before Coding/);
+    const content = result.content;
+    expect(content).toMatch(/^# AGENTS\.md/m);
+    expect(content).toMatch(/^## 最高优先规则$/m);
+    expect(content).toMatch(/当用户在 AI 编程工具中输入“了解项目规则，查看 AGENTS\.md 文档”时，必须立即先执行本规则/);
+    expect(content).toMatch(/^## CLAUDE\.md$/m);
+    expect(content).toMatch(/Behavioral guidelines to reduce common LLM coding mistakes\./);
+    expect(content).toMatch(/### 1\. Think Before Coding/);
 
     const highestPriorityIndex = content.indexOf('## 最高优先规则');
     const claudeIndex = content.indexOf('## CLAUDE.md');
     const overviewIndex = content.indexOf('## 项目概述');
-    assert.ok(highestPriorityIndex > 0);
-    assert.ok(claudeIndex > highestPriorityIndex);
-    assert.ok(overviewIndex > highestPriorityIndex);
+    expect(highestPriorityIndex).toBeGreaterThan(0);
+    expect(claudeIndex).toBeGreaterThan(highestPriorityIndex);
+    expect(overviewIndex).toBeGreaterThan(highestPriorityIndex);
   } finally {
     delete process.env.MOCK_AI;
     delete process.env.MINIMAX_API_KEY;
@@ -133,11 +151,14 @@ test('AGENTS document generation merges CLAUDE guidelines into final content', a
 });
 
 test('reviewDocuments recovers missing patchHints with a focused follow-up prompt', async () => {
-  process.env.MINIMAX_API_KEY = 'test-key';
-  process.env.MINIMAX_BASE_URL = 'https://example.test/v1';
   delete process.env.MOCK_AI;
 
   const aiService = new AIService();
+  aiService.setContext(createStubPrisma(), {
+    MINIMAX_API_KEY: 'test-key',
+    MINIMAX_BASE_URL: 'https://example.test/v1',
+    MINIMAX_MODEL: 'minimax-m2-7'
+  });
   const originalFetch = global.fetch;
   let fetchCount = 0;
 
@@ -186,6 +207,7 @@ test('reviewDocuments recovers missing patchHints with a focused follow-up promp
         title: '校园二手交易平台',
         description: '面向校园用户的闲置交易系统',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '提升文档一致性',
         techStack: ['Vue 3', 'Node.js']
       },
@@ -195,11 +217,11 @@ test('reviewDocuments recovers missing patchHints with a focused follow-up promp
       }
     );
 
-    assert.equal(fetchCount, 2);
-    assert.equal(review.issues.length, 1);
-    assert.equal(review.issues[0]?.patchHints.length, 1);
-    assert.equal(review.issues[0]?.patchHints[0]?.docType, DocType.BACKEND);
-    assert.deepEqual(review.issues[0]?.patchHints[0]?.targetHeadingPath, ['## API设计', '### 报告调度接口']);
+    expect(fetchCount).toBe(2);
+    expect(review.issues.length).toBe(1);
+    expect(review.issues[0]?.patchHints.length).toBe(1);
+    expect(review.issues[0]?.patchHints[0]?.docType).toBe(DocType.BACKEND);
+    expect(review.issues[0]?.patchHints[0]?.targetHeadingPath).toEqual(['## API设计', '### 报告调度接口']);
   } finally {
     global.fetch = originalFetch;
     delete process.env.MINIMAX_API_KEY;
@@ -271,6 +293,7 @@ test('fixDocuments applies targeted section patches instead of regenerating whol
         title: '校园二手交易平台',
         description: '面向校园用户的闲置交易系统',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '提升文档一致性',
         techStack: ['Vue 3', 'Node.js']
       },
@@ -279,13 +302,13 @@ test('fixDocuments applies targeted section patches instead of regenerating whol
     );
 
     const fixed = result.documents.get('PRD');
-    assert.ok(fixed);
-    assert.equal(fetchCount, 0);
-    assert.equal(result.unresolved.length, 0);
-    assert.match(fixed, /## 功能需求[\s\S]*实名认证后发布商品/);
-    assert.doesNotMatch(fixed, /审核修订记录|审核修订/);
-    assert.match(fixed, /## 非功能需求\n\n- 页面加载时间 < 2 秒/);
-    assert.match(fixed, /- 支持用户注册登录/);
+    expect(fixed).toBeTruthy();
+    expect(fetchCount).toBe(0);
+    expect(result.unresolved.length).toBe(0);
+    expect(fixed!).toMatch(/## 功能需求[\s\S]*实名认证后发布商品/);
+    expect(fixed!).not.toMatch(/审核修订记录|审核修订/);
+    expect(fixed!).toMatch(/## 非功能需求\n\n- 页面加载时间 < 2 秒/);
+    expect(fixed!).toMatch(/- 支持用户注册登录/);
   } finally {
     global.fetch = originalFetch;
     delete process.env.MINIMAX_API_KEY;
@@ -336,6 +359,7 @@ test('fixDocuments skips model call when document has no relevant findings', asy
         title: '校园二手交易平台',
         description: '面向校园用户的闲置交易系统',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '提升文档一致性',
         techStack: ['Vue 3', 'Node.js']
       },
@@ -343,9 +367,9 @@ test('fixDocuments skips model call when document has no relevant findings', asy
       findings
     );
 
-    assert.equal(fetchCount, 0);
-    assert.equal(result.documents.get('API'), original.trim());
-    assert.equal(result.unresolved.length, 0);
+    expect(fetchCount).toBe(0);
+    expect(result.documents.get('API')).toBe(original.trim());
+    expect(result.unresolved.length).toBe(0);
   } finally {
     global.fetch = originalFetch;
     delete process.env.MINIMAX_API_KEY;
@@ -423,6 +447,7 @@ test('fixDocuments falls back to anchor range replacement when section heading p
         title: '校园二手交易平台',
         description: '面向校园用户的闲置交易系统',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '提升文档一致性',
         techStack: ['Vue 3', 'Node.js']
       },
@@ -431,13 +456,13 @@ test('fixDocuments falls back to anchor range replacement when section heading p
     );
 
     const fixed = result.documents.get('FRONTEND');
-    assert.ok(fixed);
-    assert.equal(fetchCount, 0);
-    assert.equal(result.unresolved.length, 0);
-    assert.match(fixed, /我的发布/);
-    assert.match(fixed, /我的收藏/);
-    assert.match(fixed, /### 1\.2 组件职责划分/);
-    assert.doesNotMatch(fixed, /审核修订记录|审核修订/);
+    expect(fixed).toBeTruthy();
+    expect(fetchCount).toBe(0);
+    expect(result.unresolved.length).toBe(0);
+    expect(fixed!).toMatch(/我的发布/);
+    expect(fixed!).toMatch(/我的收藏/);
+    expect(fixed!).toMatch(/### 1\.2 组件职责划分/);
+    expect(fixed!).not.toMatch(/审核修订记录|审核修订/);
   } finally {
     global.fetch = originalFetch;
     delete process.env.MINIMAX_API_KEY;
@@ -497,6 +522,7 @@ test('fixDocuments returns unresolved items instead of appending trailing review
         title: '校园二手交易平台',
         description: '面向校园用户的闲置交易系统',
         domain: 'SE',
+        platform: 'WEB',
         objectives: '提升文档一致性',
         techStack: ['Vue 3', 'Node.js']
       },
@@ -505,15 +531,15 @@ test('fixDocuments returns unresolved items instead of appending trailing review
     );
 
     const fixed = result.documents.get('BACKEND');
-    assert.ok(fixed);
-    assert.equal(fetchCount, 0);
-    assert.equal(fixed, original.trim());
-    assert.equal(result.unresolved.length, 1);
-    assert.equal(result.unresolved[0]?.docType, DocType.BACKEND);
-    assert.equal(result.unresolved[0]?.issueId, 3);
-    assert.equal(result.unresolved[0]?.reason, 'target_heading_path_not_found');
-    assert.match(result.unresolved[0]?.fallbackNote || '', /订单状态章节需要补充取消原因/);
-    assert.doesNotMatch(fixed, /审核修订记录|审核修订/);
+    expect(fixed).toBeTruthy();
+    expect(fetchCount).toBe(0);
+    expect(fixed).toBe(original.trim());
+    expect(result.unresolved.length).toBe(1);
+    expect(result.unresolved[0]?.docType).toBe(DocType.BACKEND);
+    expect(result.unresolved[0]?.issueId).toBe(3);
+    expect(result.unresolved[0]?.reason).toBe('target_heading_path_not_found');
+    expect(result.unresolved[0]?.fallbackNote || '').toMatch(/订单状态章节需要补充取消原因/);
+    expect(fixed!).not.toMatch(/审核修订记录|审核修订/);
   } finally {
     global.fetch = originalFetch;
     delete process.env.MINIMAX_API_KEY;

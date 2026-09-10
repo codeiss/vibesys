@@ -1,38 +1,44 @@
 import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import assert from 'node:assert/strict';
-import { test, before, after, afterEach } from 'node:test';
-import path from 'node:path';
-import dotenv from 'dotenv';
-import { PrismaClient, Role, Status, TopicType, type Topic, type User } from '@prisma/client';
+import { getRequestListener } from '@hono/node-server';
+import { test, beforeAll, afterAll, afterEach, expect } from 'vitest';
+import { PrismaClient, Role, Status, TopicType, type Topic, type User } from '../src/generated/prisma';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-process.env.NODE_ENV = 'test';
-
-type JwtSigner = (payload: {
-  userId: number;
-  studentId: string;
-  name: string;
-  role: 'STUDENT' | 'ADMIN';
-}) => string;
+// signToken 是异步的，且必须显式传入 secret——签名与校验（auth.middleware.ts）
+// 用的是同一个 JWT_SECRET，否则中间件取不到有效会话，一律 401。
+// role 直接用 Prisma 的 Role 枚举（含 STUDENT / ADMIN / VIEWER），
+// 避免与 signToken 的 JwtPayload 签名不一致。
+type JwtSigner = (
+  payload: {
+    userId: number;
+    studentId: string;
+    name: string;
+    role: Role;
+  },
+  secret: string
+) => Promise<string>;
 
 let server: Server;
 let baseUrl: string;
 let prisma: PrismaClient;
 let signToken: JwtSigner;
+let jwtSecret: string;
 
 const createdTopicIds = new Set<number>();
 const createdUserIds = new Set<number>();
 
-before(async () => {
+beforeAll(async () => {
   const indexModule = await import('../src/index.js');
   prisma = indexModule.prisma;
 
   const jwtModule = await import('../src/utils/jwt.utils.js');
   signToken = jwtModule.signToken as JwtSigner;
+  jwtSecret = process.env.JWT_SECRET!;
 
-  server = createServer(indexModule.app);
+  // Hono 的 app 是对象而非 http 请求监听函数，必须经 getRequestListener 适配，
+  // 否则服务虽能 listen，但请求不会得到任何响应（表现为测试挂起至超时）。
+  server = createServer(getRequestListener(indexModule.app.fetch));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
 
@@ -64,7 +70,7 @@ afterEach(async () => {
   }
 });
 
-after(async () => {
+afterAll(async () => {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error) {
@@ -97,13 +103,16 @@ async function createUser(role: Role, label: string): Promise<User> {
   return user;
 }
 
-function authCookie(user: User): string {
-  const token = signToken({
-    userId: user.id,
-    studentId: user.studentId,
-    name: user.name,
-    role: user.role
-  });
+async function authCookie(user: User): Promise<string> {
+  const token = await signToken(
+    {
+      userId: user.id,
+      studentId: user.studentId,
+      name: user.name,
+      role: user.role
+    },
+    jwtSecret
+  );
 
   return `token=${token}`;
 }
@@ -117,14 +126,14 @@ async function requestJson(
   return { status: response.status, body };
 }
 
-test('keeps custom topics private to the creator and hidden from admin topic management', async () => {
+test('keeps custom topics private to the creator and read-only in admin topic management', async () => {
   const admin = await createUser(Role.ADMIN, 'Admin');
   const creator = await createUser(Role.STUDENT, 'Creator');
   const otherStudent = await createUser(Role.STUDENT, 'Other');
 
-  const creatorCookie = authCookie(creator);
-  const otherCookie = authCookie(otherStudent);
-  const adminCookie = authCookie(admin);
+  const creatorCookie = await authCookie(creator);
+  const otherCookie = await authCookie(otherStudent);
+  const adminCookie = await authCookie(admin);
 
   const customTitle = `Custom Topic ${randomUUID().slice(0, 8)}`;
 
@@ -140,12 +149,14 @@ test('keeps custom topics private to the creator and hidden from admin topic man
       background: '测试背景',
       objectives: '测试目标',
       domain: 'SE',
+      // platform 是必填项（topics.routes.ts 校验），且 techStack 至少 3 项
+      platform: 'WEB',
       techStack: ['Vue 3', 'Node.js + Express', 'MySQL']
     })
   });
 
-  assert.equal(createResponse.status, 200);
-  assert.equal(createResponse.body.topic.type, TopicType.CUSTOM);
+  expect(createResponse.status).toBe(200);
+  expect(createResponse.body.topic.type).toBe(TopicType.CUSTOM);
 
   const customTopic = createResponse.body.topic as Topic;
   createdTopicIds.add(customTopic.id);
@@ -153,31 +164,41 @@ test('keeps custom topics private to the creator and hidden from admin topic man
   const creatorTopics = await requestJson('/api/topics', {
     headers: { Cookie: creatorCookie }
   });
-  assert.equal(creatorTopics.status, 200);
-  assert.equal(creatorTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id), true);
+  expect(creatorTopics.status).toBe(200);
+  expect(creatorTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id)).toBe(true);
 
   const otherTopics = await requestJson('/api/topics', {
     headers: { Cookie: otherCookie }
   });
-  assert.equal(otherTopics.status, 200);
-  assert.equal(otherTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id), false);
+  expect(otherTopics.status).toBe(200);
+  expect(otherTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id)).toBe(false);
 
   const otherTopicDetail = await requestJson(`/api/topics/${customTopic.id}`, {
     headers: { Cookie: otherCookie }
   });
-  assert.equal(otherTopicDetail.status, 404);
+  expect(otherTopicDetail.status).toBe(404);
 
+  // 管理端选题管理会同时展示内置与自拟选题（前端 TopicManagement.vue 提供
+  // 「仅查看内置 / 仅查看自拟」筛选与类型标签），因此不带筛选时应能检索到自拟选题。
   const adminTopics = await requestJson('/api/admin/topics?page=1&pageSize=50', {
     headers: { Cookie: adminCookie }
   });
-  assert.equal(adminTopics.status, 200);
-  assert.equal(adminTopics.body.topics.every((topic: Topic) => topic.type === TopicType.SYSTEM), true);
-  assert.equal(adminTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id), false);
+  expect(adminTopics.status).toBe(200);
+  expect(adminTopics.body.topics.some((topic: Topic) => topic.id === customTopic.id)).toBe(true);
 
-  const adminCustomFilter = await requestJson('/api/admin/topics?type=CUSTOM', {
+  const adminSystemFilter = await requestJson('/api/admin/topics?type=SYSTEM&page=1&pageSize=50', {
     headers: { Cookie: adminCookie }
   });
-  assert.equal(adminCustomFilter.status, 400);
+  expect(adminSystemFilter.status).toBe(200);
+  expect(adminSystemFilter.body.topics.every((topic: Topic) => topic.type === TopicType.SYSTEM)).toBe(true);
+  expect(adminSystemFilter.body.topics.some((topic: Topic) => topic.id === customTopic.id)).toBe(false);
+
+  const adminCustomFilter = await requestJson('/api/admin/topics?type=CUSTOM&page=1&pageSize=50', {
+    headers: { Cookie: adminCookie }
+  });
+  expect(adminCustomFilter.status).toBe(200);
+  expect(adminCustomFilter.body.topics.every((topic: Topic) => topic.type === TopicType.CUSTOM)).toBe(true);
+  expect(adminCustomFilter.body.topics.some((topic: Topic) => topic.id === customTopic.id)).toBe(true);
 
   const adminUpdate = await requestJson(`/api/admin/topics/${customTopic.id}`, {
     method: 'PUT',
@@ -194,11 +215,11 @@ test('keeps custom topics private to the creator and hidden from admin topic man
       techStack: []
     })
   });
-  assert.equal(adminUpdate.status, 404);
+  expect(adminUpdate.status).toBe(404);
 
   const adminDelete = await requestJson(`/api/admin/topics/${customTopic.id}`, {
     method: 'DELETE',
     headers: { Cookie: adminCookie }
   });
-  assert.equal(adminDelete.status, 404);
+  expect(adminDelete.status).toBe(404);
 });

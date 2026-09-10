@@ -1,67 +1,26 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
-// DOC-01~03: Document CRUD operations
-// DOC-05: Real-time save functionality
-// D-10~13: Document model and schema
+// 这些用例尚未实现，使用 it.todo 显式标记，避免用「恒真断言」制造虚假通过。
+// 覆盖点来自 PRD 需求编号（DOC-01~06、D-10~13），实现后请把 it.todo 改为 it
+// 并补上真实断言。可复用 tests/topic.test.ts 的 HTTP 集成测试骨架
+// （getRequestListener + 临时用户 + afterEach 清理）。
 
 describe('Documents API', () => {
   describe('GET /api/documents/:projectId', () => {
-    it('should return all documents for user project', async () => {
-      // Placeholder - DOC-01, DOC-02, DOC-03
-      // TODO: Implement test for fetching documents
-      expect(true).toBe(true);
-    });
-
-    it('should include tech stack from topic', async () => {
-      // Placeholder - DOC-06
-      // TODO: Verify techStack is included in response
-      expect(true).toBe(true);
-    });
-
-    it('should reject access to other users documents', async () => {
-      // Placeholder - Security: IDOR prevention
-      // TODO: Verify userId ownership check
-      expect(true).toBe(true);
-    });
+    it.todo('should return all documents for user project'); // DOC-01, DOC-02, DOC-03
+    it.todo('should include tech stack from topic'); // DOC-06
+    it.todo('should reject access to other users documents'); // Security: IDOR 防护
   });
 
   describe('PUT /api/documents/:id', () => {
-    it('should update document content', async () => {
-      // Placeholder - DOC-05: Real-time save (D-12)
-      // TODO: Implement content update test
-      expect(true).toBe(true);
-    });
-
-    it('should reject large content over 100KB', async () => {
-      // Placeholder - DOS prevention
-      // TODO: Verify content size limit
-      expect(true).toBe(true);
-    });
-
-    it('should reject update for other users documents', async () => {
-      // Placeholder - Security: IDOR prevention
-      // TODO: Verify document ownership via project.userId
-      expect(true).toBe(true);
-    });
+    it.todo('should update document content'); // DOC-05: 实时保存 (D-12)
+    it.todo('should reject large content over 100KB'); // DOS 防护
+    it.todo('should reject update for other users documents'); // Security: 通过 project.userId 校验归属
   });
 
   describe('POST /api/documents', () => {
-    it('should create empty document', async () => {
-      // Placeholder - Lazy document creation
-      // TODO: Implement document creation test
-      expect(true).toBe(true);
-    });
-
-    it('should handle existing document gracefully', async () => {
-      // Placeholder - Unique constraint handling
-      // TODO: Verify @@unique([projectId, docType]) handling
-      expect(true).toBe(true);
-    });
-
-    it('should validate docType enum', async () => {
-      // Placeholder - DocType validation
-      // TODO: Verify docType must be PRD, FRONTEND, or BACKEND
-      expect(true).toBe(true);
-    });
+    it.todo('should create empty document'); // 惰性创建
+    it.todo('should handle existing document gracefully'); // @@unique([projectId, docType])
+    it.todo('should validate docType enum'); // DocType 取值校验
   });
 });

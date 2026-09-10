@@ -1,74 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it } from 'vitest';
 
-// DOC-04: AI content generation
-// D-01: MiniMax API integration
-// D-08/09: Domain-specific templates (SE vs BD)
-
-// Mock OpenAI SDK for MiniMax API
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Mock document content' } }]
-        })
-      }
-    }
-  }))
-}));
+// 这些用例尚未实现，使用 it.todo 显式标记，避免用「恒真断言」制造虚假通过。
+// 覆盖点来自 PRD 需求编号，实现后请把 it.todo 改为 it 并补上真实断言。
+//
+// 参考已有实现：AI 生成与评审的核心逻辑在 src/services/ai.service.ts，
+// 对应的真实单元测试见 tests/ai-service.test.ts（已覆盖缓存绕过、流式生成、
+// AGENTS 合并、评审补丁回退等）。本文件待补的是 /api/ai/* 接口层测试。
+//
+// 注：原文件 mock 了 openai SDK，但源码中的 AI 调用全部走原生 fetch，
+// 从未 import 'openai'，该 mock 不生效，已一并移除。
 
 describe('AI Service', () => {
   describe('POST /api/ai/generate', () => {
-    it('should generate document via MiniMax API', async () => {
-      // Placeholder - DOC-04: AI content generation
-      // TODO: Implement AI generation test
-      expect(true).toBe(true);
-    });
-
-    it('should use correct model and parameters', async () => {
-      // Placeholder - D-01: MiniMax API config
-      // TODO: Verify model='minimax-m2-7', temperature=0.7, max_tokens=2048
-      expect(true).toBe(true);
-    });
-
-    it('should reject generation for other users projects', async () => {
-      // Placeholder - Security: IDOR prevention
-      // TODO: Verify project ownership before generation
-      expect(true).toBe(true);
-    });
+    // DOC-04: AI content generation
+    it.todo('should generate document via MiniMax API');
+    // D-01: MiniMax API config
+    it.todo('should use correct model and parameters');
+    // Security: IDOR prevention
+    it.todo('should reject generation for other users projects');
   });
 
   describe('Domain Templates', () => {
-    it('should use SE template for software engineering domain', async () => {
-      // Placeholder - D-08: SE template differentiation
-      // TODO: Verify SE template includes: 项目概述, 功能需求, 技术建议, 验收标准
-      expect(true).toBe(true);
-    });
-
-    it('should use BD template for big data domain', async () => {
-      // Placeholder - D-09: BD template differentiation
-      // TODO: Verify BD template includes: 数据流程, 数据采集, 分析模型, 数据存储
-      expect(true).toBe(true);
-    });
-
-    it('should generate PRD with correct structure', async () => {
-      // Placeholder - D-05: PRD standard structure
-      // TODO: Verify generated content structure
-      expect(true).toBe(true);
-    });
+    // D-08: SE template differentiation
+    it.todo('should use SE template for software engineering domain');
+    // D-09: BD template differentiation
+    it.todo('should use BD template for big data domain');
+    // D-05: PRD standard structure
+    it.todo('should generate PRD with correct structure');
   });
 
   describe('Error Handling', () => {
-    it('should handle API timeout gracefully', async () => {
-      // Placeholder - 30s timeout handling
-      // TODO: Verify timeout error handling
-      expect(true).toBe(true);
-    });
-
-    it('should not expose API key in response', async () => {
-      // Placeholder - T-03-01-01: API key protection
-      // TODO: Verify MINIMAX_API_KEY never in response
-      expect(true).toBe(true);
-    });
+    // 30s timeout handling
+    it.todo('should handle API timeout gracefully');
+    // T-03-01-01: API key protection
+    it.todo('should not expose API key in response');
   });
 });
