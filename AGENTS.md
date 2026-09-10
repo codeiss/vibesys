@@ -19,16 +19,16 @@
 # Backend (Cloudflare Workers)
 cd backend && pnpm install
 cp .env.example .env  # fill DATABASE_URL (file:./dev.db for local), JWT_SECRET
-DATABASE_URL="file:./dev.db" npx prisma generate && DATABASE_URL="file:./dev.db" npx prisma db push
+pnpm run db:push       # prisma db push (creates SQLite tables)
 pnpm run db:seed       # creates admin/admin123
-pnpm dev               # wrangler dev → port 8787
+pnpm dev               # tsx watch src/index.ts → port 3001
 
 # Frontend (separate terminal)
 cd frontend && pnpm install
-pnpm dev               # vite → port 5173, proxies /api → 8787
+pnpm dev               # vite → port 5173, proxies /api → 3001
 ```
 
-**Ports:** Backend 8787 (wrangler dev), Frontend 5173, D1 (SQLite, local file).
+**Ports:** Backend 3001 (tsx dev server), Frontend 5173, D1 (SQLite, local file).
 
 ---
 
@@ -193,10 +193,10 @@ CI/CD 在 push 后立即部署新 Worker，新 Worker 里的 Prisma client 已�
 1. **Cloudflare Workers runtime:** Backend runs on Workers, not Node.js. Use `fetch()` not `axios`, no `fs` module, no `process.env` (use `c.env` from Hono context)
 2. **Prisma + D1:** Uses `@prisma/adapter-d1` adapter. Prisma client generated to `backend/src/generated/prisma/` and **committed to git**
 3. **Worker entry point:** `backend/src/worker.ts` exports default Hono app (`export default app`), not `index.ts`
-4. **Local dev:** `pnpm dev` runs `wrangler dev` on port 8787, not `tsx watch`
+4. **Local dev:** `pnpm dev` runs `tsx watch src/index.ts` on port **3001** (Node, not Workers). Only `wrangler dev` / deploy uses the Workers runtime via `worker.ts`
 5. **D1 migration order:** MUST run `ALTER TABLE` on production D1 **BEFORE** pushing code, otherwise 500 errors for all users
 6. **Admin routes are monolithic:** `admin.routes.ts` is 1507 lines with all admin CRUD in one file
-7. **`ai.service.ts` is monolithic:** 2778 lines with all generation/review/fix methods
+7. **`ai.service.ts` is monolithic:** 2473 lines with all generation/review/fix methods
 8. **Menu order in schema:** `@@index([key])` is listed after fields but before closing `}` — Prisma syntax
 9. **`ban.middleware.ts` is imported but checkBannedMiddleware is not a route-level middleware in most routes** — the service file imports it but routes use it only in specific admin endpoints
 10. **Planning docs are out of date** (`STATE.md`, `ROADMAP.md` say all phases complete, but features like graduation documents, user API settings, AI providers were added after)
@@ -208,24 +208,24 @@ CI/CD 在 push 后立即部署新 Worker，新 Worker 里的 Prisma client 已�
 
 ```
 backend/                  # Cloudflare Workers API server
-  prisma/schema.prisma    # 16 models (319 lines)
+  prisma/schema.prisma    # 13 models + 9 enums (318 lines)
   wrangler.toml           # Worker config (name, routes, D1 binding, vars)
   src/
     worker.ts             # Worker entry: exports default Hono app
     app.factory.ts        # Creates Hono app with routes + middleware
     routes/               # 9 route files
-    services/             # ai.service.ts (2778 lines), apiProvider, graduation, coolify
+    services/             # ai.service.ts (2473 lines), apiProvider, graduation, coolify
     prompts/              # 11 prompt templates
     middleware/           # auth, ban, rate-limit
     lib/                  # prisma.ts (D1 adapter), logger.ts
     utils/                # jwt, password, excel-import
-    scripts/              # init-admin.ts, update-passwords.ts
+    scripts/              # init-admin.ts, update-passwords.ts, import-thesis-topics.ts, mysql-to-d1.ts
     generated/prisma/     # Generated Prisma client (COMMITTED to git)
   tests/                  # Test files (node:test)
 frontend/                 # Vue 3 SPA (Cloudflare Pages)
   src/
     api/                  # 9+ API client modules
-    stores/               # 6 Pinia stores
+    stores/               # 7 Pinia stores
     views/                # 7 pages + admin/ subfolder + graduation/
     router/               # index.ts + guards.ts
     components/           # Shared Vue components (incl. ArchiveDeployPanel)
